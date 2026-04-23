@@ -40,13 +40,13 @@
     h2, h3 {
       margin: 0 0 12px 0;
     }
-    input, button, textarea, select {
+    input, button {
       font-size: 14px;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid #cfd6e4;
     }
-    input, textarea, select {
+    input {
       background: #fff;
       color: #223;
     }
@@ -279,17 +279,17 @@
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
     // Firebase 콘솔 → 프로젝트 설정 → 일반 → 내 앱 → SDK 설정 및 구성
-    // 아래 값을 본인 프로젝트 값으로 바꾸세요.
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyBHsU3d7VcyuwZP4XrmqaZbdHzKLAx2Psw",
+      authDomain: "notebookmanager1-4b469.firebaseapp.com",
+      projectId: "notebookmanager1-4b469",
+      storageBucket: "notebookmanager1-4b469.firebasestorage.app",
+      messagingSenderId: "1062682758509",
+      appId: "1:1062682758509:web:fcc66c6ce1ea84406ede64",
+      measurementId: "G-ZHLJTQPFMK"
     };
 
     // 관리자 이메일 목록
-    // 로그인 후 이 목록에 있는 이메일만 관리자 화면을 보게 합니다.
-    // Firestore 보안 규칙도 반드시 관리자 기준으로 같이 제한해야 합니다.
     const ADMIN_EMAILS = [
       "solgaram21@gmail.com"
     ];
