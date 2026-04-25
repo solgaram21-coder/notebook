@@ -40,13 +40,13 @@
     h2, h3 {
       margin: 0 0 12px 0;
     }
-    input, select, button {
+    input, select, button, textarea {
       font-size: 14px;
       padding: 10px 12px;
       border-radius: 8px;
       border: 1px solid #cfd6e4;
     }
-    input, select {
+    input, select, textarea {
       background: #fff;
       color: #223;
     }
@@ -89,6 +89,10 @@
     .pill.approved { background: #e8f5e9; color: #1b5e20; }
     .pill.rejected { background: #fdecea; color: #b71c1c; }
     .pill.expired { background: #eceff1; color: #455a64; }
+    .pill.repair { background: #fff0f6; color: #ad1457; }
+    .pill.wait { background: #fff4e5; color: #b26a00; }
+    .pill.working { background: #e3f2fd; color: #0d47a1; }
+    .pill.done { background: #e8f5e9; color: #1b5e20; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -173,6 +177,21 @@
       color: #344054;
       font-weight: 700;
     }
+    .tab-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .tab-btn {
+      background: #eef2ff;
+      color: #173b78;
+      border: 1px solid #c8d4ff;
+    }
+    .tab-btn.active {
+      background: #173b78;
+      color: #fff;
+    }
     @media (max-width: 820px) {
       header { font-size: 20px; }
       main { padding: 12px; }
@@ -220,6 +239,7 @@
               <span><strong>등록 이름 수:</strong> <span id="namesCount">-</span></span>
               <span><strong>요청 수:</strong> <span id="requestsCount">-</span></span>
               <span><strong>현재 표시:</strong> <span id="filteredRequestsCount">-</span></span>
+              <span><strong>고장 접수:</strong> <span id="repairCount">-</span></span>
             </div>
           </div>
           <div class="toolbar-right">
@@ -295,6 +315,7 @@
               <option value="">유형 전체</option>
               <option value="short">단기 short</option>
               <option value="long">장기 long</option>
+              <option value="repair">고장 접수</option>
             </select>
             <button id="searchReqBtn">검색</button>
             <button id="clearSearchBtn" class="secondary">검색 초기화</button>
@@ -323,12 +344,45 @@
                 <th>요청시각</th>
                 <th>번호</th>
                 <th>이름</th>
-                <th>용도</th>
+                <th>용도/증상</th>
                 <th>유형</th>
                 <th>상태</th>
                 <th>티켓 시작</th>
                 <th>티켓 종료</th>
                 <th style="width:180px;">작업</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>고장 접수 목록</h3>
+        <div class="row">
+          <button id="loadRepairBtn">고장 접수만 보기</button>
+          <select id="repairStatusFilter">
+            <option value="">상태 전체</option>
+            <option value="접수 대기">접수 대기</option>
+            <option value="처리중">처리중</option>
+            <option value="처리 완료">처리 완료</option>
+          </select>
+          <button id="filterRepairBtn" class="secondary">상태별 보기</button>
+        </div>
+        <div class="footer-note">
+          노트북 바탕화면의 [노트북 사용 불편/고장 신고] 페이지에서 접수된 내용만 표시합니다.
+        </div>
+        <div id="repairSummary" class="summary-line">고장 접수 목록을 불러오면 표시됩니다.</div>
+        <div class="table-wrap">
+          <table id="repairTable">
+            <thead>
+              <tr>
+                <th>접수시각</th>
+                <th>노트북 번호</th>
+                <th>사용자 이름</th>
+                <th>고장 증상</th>
+                <th>상태</th>
+                <th style="width:180px;">상태 변경</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -390,11 +444,13 @@
     const adminArea = $("adminArea");
     const namesTableBody = $("namesTable").querySelector("tbody");
     const reqTableBody = $("reqTable").querySelector("tbody");
+    const repairTableBody = $("repairTable").querySelector("tbody");
 
     let currentNames = [];
     let previewNames = [];
     let allRequests = [];
     let currentDisplayedRequests = [];
+    let allRepairs = [];
 
     function setMsg(el, text, type = "muted") {
       el.className = "status-line " + type;
@@ -448,9 +504,25 @@
       return `${y}${m}${day}`;
     }
 
-    function statusBadge(status) {
+    function requestTypeLabel(type) {
+      if (type === "short") return "단기";
+      if (type === "long") return "장기";
+      if (type === "repair") return "고장 접수";
+      return type || "-";
+    }
+
+    function statusBadge(status, type = "") {
+      if (type === "repair") {
+        const cls = status === "처리 완료" ? "done" : status === "처리중" ? "working" : "wait";
+        return `<span class="pill ${cls}">${escapeHtml(status || "접수 대기")}</span>`;
+      }
       const cls = ["pending", "approved", "rejected", "expired"].includes(status) ? status : "";
       return `<span class="pill ${cls}">${escapeHtml(status || "-")}</span>`;
+    }
+
+    function typeBadge(type) {
+      if (type === "repair") return `<span class="pill repair">고장 접수</span>`;
+      return escapeHtml(requestTypeLabel(type));
     }
 
     function isAdminEmail(email) {
@@ -543,6 +615,7 @@
         setMsg(loginMsg, "", "muted");
         namesTableBody.innerHTML = "";
         reqTableBody.innerHTML = "";
+        repairTableBody.innerHTML = "";
         return;
       }
 
@@ -717,19 +790,19 @@
         setMsg($("bulkNameMsg"), "기존 이름 목록 삭제 및 새 이름 등록 중...", "muted");
 
         const oldSnaps = await getDocs(collection(db, "allowed_names"));
-        const deleteBatchSize = 400;
+        const batchSize = 400;
 
-        for (let i = 0; i < oldSnaps.docs.length; i += deleteBatchSize) {
+        for (let i = 0; i < oldSnaps.docs.length; i += batchSize) {
           const batch = writeBatch(db);
-          oldSnaps.docs.slice(i, i + deleteBatchSize).forEach((docSnap) => {
+          oldSnaps.docs.slice(i, i + batchSize).forEach((docSnap) => {
             batch.delete(doc(db, "allowed_names", docSnap.id));
           });
           await batch.commit();
         }
 
-        for (let i = 0; i < previewNames.length; i += deleteBatchSize) {
+        for (let i = 0; i < previewNames.length; i += batchSize) {
           const batch = writeBatch(db);
-          previewNames.slice(i, i + deleteBatchSize).forEach((name) => {
+          previewNames.slice(i, i + batchSize).forEach((name) => {
             const ref = doc(collection(db, "allowed_names"));
             batch.set(ref, {
               name,
@@ -765,14 +838,16 @@
           ? `<button class="approveBtn approve" data-id="${item.id}">장기 승인</button>`
           : "";
 
+        const purposeText = v.requestType === "repair" ? (v.symptom || v.purpose || "") : (v.purpose || "");
+
         return `
           <tr>
             <td>${escapeHtml(toLocalReadable(v.requestedAt))}</td>
             <td>${escapeHtml(v.computerNo)}</td>
             <td>${escapeHtml(v.userName)}</td>
-            <td>${escapeHtml(v.purpose)}</td>
-            <td>${escapeHtml(v.requestType)}</td>
-            <td>${statusBadge(v.status)}</td>
+            <td>${escapeHtml(purposeText)}</td>
+            <td>${typeBadge(v.requestType)}</td>
+            <td>${statusBadge(v.status, v.requestType)}</td>
             <td>${escapeHtml(toLocalReadable(v.ticketStartAt))}</td>
             <td>${escapeHtml(toLocalReadable(v.ticketEndAt))}</td>
             <td>${approveBtn}</td>
@@ -817,7 +892,10 @@
         data: d.data()
       }));
 
+      $("repairCount").textContent = allRequests.filter((item) => item.data.requestType === "repair").length;
+
       renderRequests(allRequests, `전체 신청 목록을 표시합니다. 전체 ${allRequests.length}건`);
+      renderRepairs(allRequests.filter((item) => item.data.requestType === "repair"), "전체 고장 접수 목록");
     }
 
     function filterByDate(dateKey) {
@@ -895,6 +973,59 @@
       $("searchUserName").value = "";
       $("searchRequestType").value = "";
       renderRequests(allRequests, `검색 초기화: 전체 ${allRequests.length}건`);
+    };
+
+    function renderRepairs(list, summaryText) {
+      allRepairs = list;
+      $("repairSummary").textContent = `${summaryText}: ${list.length}건`;
+
+      repairTableBody.innerHTML = list.map((item) => {
+        const v = item.data;
+        const status = v.status || "접수 대기";
+        return `
+          <tr>
+            <td>${escapeHtml(toLocalReadable(v.requestedAt))}</td>
+            <td>${escapeHtml(v.computerNo)}</td>
+            <td>${escapeHtml(v.userName)}</td>
+            <td>${escapeHtml(v.symptom || v.purpose || "")}</td>
+            <td>${statusBadge(status, "repair")}</td>
+            <td>
+              <select class="repairStatusSelect" data-id="${item.id}">
+                <option value="접수 대기" ${status === "접수 대기" ? "selected" : ""}>접수 대기</option>
+                <option value="처리중" ${status === "처리중" ? "selected" : ""}>처리중</option>
+                <option value="처리 완료" ${status === "처리 완료" ? "selected" : ""}>처리 완료</option>
+              </select>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".repairStatusSelect").forEach((sel) => {
+        sel.onchange = async () => {
+          await updateDoc(doc(db, "requests", sel.dataset.id), {
+            status: sel.value,
+            updatedAt: isoNow()
+          });
+          alert("고장 접수 상태가 변경되었습니다.");
+          await loadRequests();
+        };
+      });
+    }
+
+    $("loadRepairBtn").onclick = () => {
+      const list = allRequests.filter((item) => item.data.requestType === "repair");
+      renderRepairs(list, "전체 고장 접수 목록");
+      renderRequests(list, `고장 접수만 표시합니다. ${list.length}건`);
+    };
+
+    $("filterRepairBtn").onclick = () => {
+      const status = $("repairStatusFilter").value;
+      let list = allRequests.filter((item) => item.data.requestType === "repair");
+      if (status) {
+        list = list.filter((item) => (item.data.status || "접수 대기") === status);
+      }
+      renderRepairs(list, status ? `${status} 상태 고장 접수 목록` : "전체 고장 접수 목록");
+      renderRequests(list, status ? `고장 접수 / ${status}: ${list.length}건` : `고장 접수 전체: ${list.length}건`);
     };
 
     $("loadReqBtn").onclick = loadRequests;
