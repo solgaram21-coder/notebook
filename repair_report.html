@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>노트북 사용 불편/고장 신고</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "맑은 고딕", Arial, sans-serif;
+      background: #f5f7fb;
+      color: #223;
+    }
+    header {
+      background: #ad1457;
+      color: white;
+      padding: 24px;
+      font-size: 30px;
+      font-weight: 800;
+      text-align: center;
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 3px 14px rgba(0,0,0,.08);
+    }
+    label {
+      display: block;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 18px 0 8px;
+    }
+    input, textarea, button {
+      width: 100%;
+      font-size: 18px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #cfd6e4;
+      font-family: inherit;
+    }
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+    button {
+      margin-top: 20px;
+      background: #ad1457;
+      color: white;
+      border: none;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+    .notice {
+      background: #fff0f6;
+      border: 1px solid #f8bbd0;
+      color: #880e4f;
+      padding: 14px 16px;
+      border-radius: 12px;
+      line-height: 1.7;
+      font-size: 16px;
+    }
+    .msg {
+      margin-top: 14px;
+      min-height: 28px;
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .success { color: #0f9d58; }
+    .error { color: #c62828; }
+    .muted {
+      color: #667085;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>노트북 사용 불편/고장 신고</header>
+
+  <main>
+    <div class="card">
+      <div class="notice">
+        노트북 사용 중 불편하거나 고장 증상이 있으면 아래 내용을 작성한 뒤 [전송] 버튼을 누르세요.
+        접수된 내용은 관리자 페이지의 [고장 접수 목록]에서 확인됩니다.
+      </div>
+
+      <label for="computerNo">노트북 번호</label>
+      <input id="computerNo" inputmode="numeric" placeholder="예: 1 또는 01" />
+
+      <label for="userName">사용자 이름</label>
+      <input id="userName" placeholder="예: 홍길동" />
+
+      <label for="symptom">고장 증상 / 사용 불편 내용</label>
+      <textarea id="symptom" placeholder="예: 전원이 자주 꺼짐, 키보드 일부가 안 눌림, 인터넷 연결 불량, 화면 깜빡임 등"></textarea>
+
+      <button id="sendBtn">전송</button>
+
+      <div id="msg" class="msg"></div>
+      <div class="muted">
+        전송이 안 되면 인터넷 연결 상태를 확인한 뒤 다시 시도하세요.
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBHsU3d7VcyuwZP4XrmqaZbdHzKLAx2Psw",
+      authDomain: "notebookmanager1-4b469.firebaseapp.com",
+      projectId: "notebookmanager1-4b469",
+      storageBucket: "notebookmanager1-4b469.firebasestorage.app",
+      messagingSenderId: "1062682758509",
+      appId: "1:1062682758509:web:fcc66c6ce1ea84406ede64",
+      measurementId: "G-ZHLJTQPFMK"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const $ = (id) => document.getElementById(id);
+
+    function setMsg(text, cls) {
+      $("msg").className = "msg " + cls;
+      $("msg").textContent = text;
+    }
+
+    function isoNow() {
+      return new Date().toISOString();
+    }
+
+    $("computerNo").addEventListener("input", () => {
+      const filtered = $("computerNo").value.replace(/[^0-9]/g, "");
+      if ($("computerNo").value !== filtered) $("computerNo").value = filtered;
+    });
+
+    $("sendBtn").onclick = async () => {
+      const computerNoRaw = $("computerNo").value.trim();
+      const userName = $("userName").value.trim();
+      const symptom = $("symptom").value.trim();
+
+      if (!computerNoRaw) {
+        setMsg("노트북 번호를 입력하세요.", "error");
+        $("computerNo").focus();
+        return;
+      }
+
+      if (!userName) {
+        setMsg("사용자 이름을 입력하세요.", "error");
+        $("userName").focus();
+        return;
+      }
+
+      if (symptom.length < 5) {
+        setMsg("고장 증상을 5글자 이상 입력하세요.", "error");
+        $("symptom").focus();
+        return;
+      }
+
+      try {
+        $("sendBtn").disabled = true;
+        setMsg("전송 중입니다...", "muted");
+
+        const now = new Date();
+        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+        await addDoc(collection(db, "requests"), {
+          computerNo: Number(computerNoRaw),
+          userName,
+          purpose: symptom,
+          symptom,
+          requestType: "repair",
+          status: "접수 대기",
+          requestedAt: isoNow(),
+          monthKey,
+          ticketStartAt: "",
+          ticketEndAt: "",
+          updatedAt: isoNow()
+        });
+
+        setMsg("고장 신고가 접수되었습니다. 관리자에게 전달되었습니다.", "success");
+        $("symptom").value = "";
+      } catch (err) {
+        setMsg("전송 실패: " + (err.message || err), "error");
+      } finally {
+        $("sendBtn").disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
